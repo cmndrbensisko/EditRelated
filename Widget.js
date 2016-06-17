@@ -72,7 +72,7 @@ define([
             this._jimuLayerInfos = operLayerInfos;
             //ADAdd
             array.forEach(operLayerInfos._finalLayerInfos,function(layerInfo){
-              if (layerInfo.layerObject.relationships.length>0){
+              if (layerInfo.layerObject.relationships.length>0 && layerInfo.layerObject.type == "Feature Layer"){
                 array.forEach(layerInfo.layerObject.relationships,function(relationship){
                   layerInfo.layerObject.on("click",function(evt){
                     var signal = _viewerMap.infoWindow.on("show",function(){
@@ -83,15 +83,15 @@ define([
                       relatedQuery.relationshipId = relationship.id;
                       graphicAttributes = evt.graphic.attributes;
                       relatedQuery.objectIds = [graphicAttributes[evt.graphic._layer.objectIdField]];
-                      operLayerInfos._finalLayerInfos[0].layerObject.queryRelatedFeatures(relatedQuery,function(relatedRecords){
+                      layerInfo.layerObject.queryRelatedFeatures(relatedQuery,function(relatedRecords){
                         relatedChange = function(event, uniqueId, fieldName, foreignKeyField, objectId, objectIdField, isNew) {
                           var relatedChangeRecord = {
                             attributes: {}
                           };
                           relatedChangeRecord.attributes[foreignKeyField]=uniqueId;
                           relatedChangeRecord.attributes[fieldName] = event.srcElement.value
-                          var str = operLayerInfos._finalLayerInfos[0].layerObject.url.substr(operLayerInfos._finalLayerInfos[0].layerObject.url.lastIndexOf('/') + 1);
-                          var relatedURL = operLayerInfos._finalLayerInfos[0].layerObject.url.replace( new RegExp(str), '' ) + relationship.relatedTableId;
+                          var str = layerInfo.layerObject.url.substr(layerInfo.layerObject.url.lastIndexOf('/') + 1);
+                          var relatedURL = layerInfo.layerObject.url.replace( new RegExp(str), '' ) + relationship.relatedTableId;
                           var relatedTable = new FeatureLayer(relatedURL);
                           if (isNew){
                             relatedTable.applyEdits([relatedChangeRecord],null,null);  
@@ -101,8 +101,8 @@ define([
                           }
                           
                         };
-                        var str = operLayerInfos._finalLayerInfos[0].layerObject.url.substr(operLayerInfos._finalLayerInfos[0].layerObject.url.lastIndexOf('/') + 1);
-                        var relatedURL = operLayerInfos._finalLayerInfos[0].layerObject.url.replace( new RegExp(str), '' ) + relationship.relatedTableId;
+                        var str = layerInfo.layerObject.url.substr(layerInfo.layerObject.url.lastIndexOf('/') + 1);
+                        var relatedURL = layerInfo.layerObject.url.replace( new RegExp(str), '' ) + relationship.relatedTableId;
                         var relatedTable = new FeatureLayer(relatedURL);
                         relatedTable.on("load",function(loadedLayer){
                           relatedTable = loadedLayer.layer
