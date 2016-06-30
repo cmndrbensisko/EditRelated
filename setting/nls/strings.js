@@ -1,6 +1,7 @@
 define({
   root: ({
     enableUndoRedo: "Enable Undo/Redo",
+	runMinimized: "Run Minimized (Editing Only)",
     toolbarVisible: "Toolbar Visible",
     toolbarOptions: "Toolbar Options",
     mergeVisible: "Merge",

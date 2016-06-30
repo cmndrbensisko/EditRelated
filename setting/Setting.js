@@ -68,11 +68,13 @@ define([
 
       _initToolbar: function() {
         this.toolbarVisible.set('checked', this.config.editor.toolbarVisible);
+		this.runMinimized.set('checked', this.config.editor.runMinimized);
         this.enableUndoRedo.set('checked', this.config.editor.enableUndoRedo);
         this.mergeVisible.set('checked', this.config.editor.toolbarOptions.mergeVisible);
         this.cutVisible.set('checked', this.config.editor.toolbarOptions.cutVisible);
         this.reshapeVisible.set('checked', this.config.editor.toolbarOptions.reshapeVisible);
         this._onToolbarSelected();
+		this._onRunMinimized();
       },
 
       _initLayersTable: function() {
@@ -277,12 +279,16 @@ define([
         if(rowData && rowData.edit) {
           var editFields = new EditFields({
             nls: this.nls,
-            _layerInfo: tr._layerInfo
+            _layerInfo: tr._layerInfo,
+            _viewerMap: this.map
           });
           editFields.popupEditPage();
         }
       },
 
+	  _onRunMinimized: function() {
+	  },
+	  
       _onToolbarSelected: function() {
         if (!this.toolbarVisible.checked) {
           //html.setStyle(this.toolbarOptionsTr, 'display', 'none');
@@ -296,6 +302,7 @@ define([
       },
 
       _resetToolbarConfig: function() {
+		this.config.editor.runMinimized = this.runMinimized.checked;
         this.config.editor.toolbarVisible = this.toolbarVisible.checked;
         this.config.editor.enableUndoRedo = this.enableUndoRedo.checked;
         this.config.editor.toolbarOptions.mergeVisible = this.mergeVisible.checked;

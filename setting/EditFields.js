@@ -27,6 +27,26 @@ define(
         this.nls = lang.mixin(this.nls, window.jimuNls.common);
         this._initFieldsTable();
         this._setFiedsTabele(this._layerInfo.fieldInfos);
+        this._checkForRelationships(this._layerInfo)
+      },
+
+      _checkForRelationships: function(layerInfo){
+        var layerObject = this._viewerMap.getLayer(layerInfo.featureLayer.id);
+        if (layerObject.relationships && layerObject.type == "Feature Layer"){
+          array.forEach(layerObject.relationships,lang.hitch(this,function(relationship){
+            var str = layerObject.url.substr(layerObject.url.lastIndexOf('/') + 1);
+            var relatedUrl = layerObject.url.replace( new RegExp(str), '' ) + relationship.relatedTableId;
+            esri.request({"url":relatedUrl,"content":{"f":"json"}}).then(lang.hitch(this, function(response,io){
+              array.forEach(response.fields, lang.hitch(this,function(fieldInfo){
+                this._fieldsTable.addRow({
+                  fieldName: "[R]" + fieldInfo.name,
+                  isEditable: fieldInfo.editable,
+                  label: fieldInfo.alias
+                });
+              }))
+            }))
+          }))
+        }
       },
 
       popupEditPage: function() {
