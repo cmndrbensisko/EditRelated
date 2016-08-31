@@ -27,16 +27,18 @@ define([
     'dijit/_WidgetsInTemplateMixin',
     'jimu/BaseWidget',
     'jimu/MapManager',
+    "esri/tasks/query", 
+    "esri/tasks/QueryTask",
     'jimu/LayerInfos/LayerInfos',
     'esri/dijit/editing/Editor',
     "esri/tasks/RelationshipQuery",
     'esri/dijit/Popup',
     "esri/dijit/editing/TemplatePicker",
-    "dijit/form/Button",
+    "dijit/form/Button","dojo/store/Memory", "dijit/form/Select",
     "./utils"
   ],
   function(declare, lang, array, html, domConstruct, esriBundle, domAttr, on, FeatureLayer, _WidgetsInTemplateMixin,
-    BaseWidget, MapManager, LayerInfos, Editor, RelationshipQuery, Popup, TemplatePicker, Button, editUtils) {
+    BaseWidget, MapManager, Query, QueryTask, LayerInfos, Editor, RelationshipQuery, Popup, TemplatePicker, Button, Memory, Select, editUtils) {
     return declare([BaseWidget, _WidgetsInTemplateMixin], {
       name: 'Edit',
       baseClass: 'jimu-widget-edit',
@@ -63,9 +65,9 @@ define([
       _init: function() {
         this._editorMapClickHandlers = [];
         this._configEditor = lang.clone(this.config.editor);
-		if (this._configEditor.runMinimized){
-			html.setStyle(this.domNode.parentNode.parentNode.parentNode, 'display', 'none');
-		}
+        if (this._configEditor.runMinimized){
+          html.setStyle(this.domNode.parentNode.parentNode.parentNode, 'display', 'none');
+        }
       },
 
       onOpen: function() {
@@ -80,60 +82,124 @@ define([
                   layerInfo.layerObject.on("click",lang.hitch(this,function(evt){
                     var signal = _viewerMap.infoWindow.on("show",lang.hitch(this,function(){
                       signal.remove()
+                      domConstruct.destroy(dojo.query(".atiAttributes table")[0])
                       dojo.query(".relatedItems").forEach(function(node){domConstruct.destroy(node)});
-                      var relatedQuery = new RelationshipQuery();
-                      relatedQuery.outFields = ["*"];
-                      relatedQuery.relationshipId = relationship.id;
-                      graphicAttributes = evt.graphic.attributes;
-                      relatedQuery.objectIds = [graphicAttributes[evt.graphic._layer.objectIdField]];
-                      layerInfo.layerObject.queryRelatedFeatures(relatedQuery,lang.hitch(this,function(relatedRecords){
-                        relatedChange = function(event, uniqueId, fieldName, foreignKeyField, objectId, objectIdField, isNew) {
-                          var relatedChangeRecord = {
-                            attributes: {}
+                      var queryTask = new QueryTask(layerInfo.layerObject.url.replace("FeatureServer","MapServer"))
+                      var query = new Query()
+                      //query.where = "GISADM.RE_CityFacilities2.OBJECTID=" + evt.graphic.attributes["OBJECTID"]
+                      query.where = layerInfo.layerObject.displayField.substring(0, layerInfo.layerObject.displayField.lastIndexOf('.')) + "." + layerInfo.layerObject.objectIdField + "=" + evt.graphic.attributes[layerInfo.layerObject.objectIdField]
+                      query.outFields = ["*"]
+                      queryTask.execute(query,lang.hitch(this,function(results){
+                        for (var key in results.features[0].attributes){
+                          array.forEach(this.getThisLayerInfo(this.config.editor,layerInfo.id).fieldInfos, lang.hitch(this,function(_field){
+                            if (_field.fieldName == key){
+                              var row = domConstruct.toDom('<tr class="relatedItems"><td class="atiLabel">' + key + '</td><td width="100%">' + results.features[0].attributes[key] + '</td></tr>')
+                              domConstruct.place(row, dojo.query(".atiAttributes")[0])               
+                            }
+                          }))                  
+                        }
+                        var relatedQuery = new RelationshipQuery();
+                        relatedQuery.outFields = ["*"];
+                        relatedQuery.relationshipId = relationship.id;
+                        graphicAttributes = evt.graphic.attributes;
+                        relatedQuery.objectIds = [graphicAttributes[evt.graphic._layer.objectIdField]];
+                        layerInfo.layerObject.queryRelatedFeatures(relatedQuery,lang.hitch(this,function(relatedRecords){
+                          relatedChange = function(event, uniqueId, fieldName, foreignKeyField, objectId, objectIdField, isNew) {
+                            var relatedChangeRecord = {
+                              attributes: {}
+                            };
+                            relatedChangeRecord.attributes[foreignKeyField]=uniqueId;
+                            relatedChangeRecord.attributes[fieldName] = event
+                            var str = layerInfo.layerObject.url.substr(layerInfo.layerObject.url.lastIndexOf('/') + 1);
+                            var relatedURL = layerInfo.layerObject.url.replace( new RegExp(str), '' ) + relationship.relatedTableId;
+                            var relatedTable = new FeatureLayer(relatedURL);
+                            if (isNew){
+                              relatedTable.applyEdits([relatedChangeRecord],null,null);  
+                            }else{
+                              relatedChangeRecord.attributes[objectIdField] = objectId;
+                              relatedTable.applyEdits(null,[relatedChangeRecord],null);  
+                            }
+                            
                           };
-                          relatedChangeRecord.attributes[foreignKeyField]=uniqueId;
-                          relatedChangeRecord.attributes[fieldName] = event.srcElement.value
                           var str = layerInfo.layerObject.url.substr(layerInfo.layerObject.url.lastIndexOf('/') + 1);
                           var relatedURL = layerInfo.layerObject.url.replace( new RegExp(str), '' ) + relationship.relatedTableId;
                           var relatedTable = new FeatureLayer(relatedURL);
-                          if (isNew){
-                            relatedTable.applyEdits([relatedChangeRecord],null,null);  
-                          }else{
-                            relatedChangeRecord.attributes[objectIdField] = objectId;
-                            relatedTable.applyEdits(null,[relatedChangeRecord],null);  
-                          }
-                          
-                        };
-                        var str = layerInfo.layerObject.url.substr(layerInfo.layerObject.url.lastIndexOf('/') + 1);
-                        var relatedURL = layerInfo.layerObject.url.replace( new RegExp(str), '' ) + relationship.relatedTableId;
-                        var relatedTable = new FeatureLayer(relatedURL);
-                        relatedTable.on("load",lang.hitch(this,function(loadedLayer){
-                          relatedTable = loadedLayer.layer
-                          if (Object.keys(relatedRecords).length == 0){
-                              array.forEach(relatedTable.fields,lang.hitch(this,function(field){
-                                var layerConfig = this.getThisLayerInfo(this.config.editor,layerInfo.id);
-                                array.forEach(layerConfig.fieldInfos, lang.hitch(this,function(_field){
-                                  if (_field.fieldName.substring(3) == field.name && _field.isEditable && _field.label == field.alias && field.name != relatedTable.relationships[0].keyField && field.name != layerInfo.layerObject.objectIdField){
-                                    var row = domConstruct.toDom('<tr class="relatedItems"><td class="atiLabel">' + field.name + '</td><td width="100%"><div class="dijit dijitReset dijitInline dijitLeft atiField dijitTextBox" role="presentation"><div class="dijitReset dijitInputField dijitInputContainer"><input class="dijitReset dijitInputInner" data-dojo-attach-point="textbox,focusNode" autocomplete="off" type="text"' + " onblur='relatedChange(event," + '"' + graphicAttributes[relationship.keyField] + '"' + ',"' + field.name + '","' + relatedTable.relationships[0].keyField + '","","",true)' + "'" + ' tabindex="0" value="" aria-disabled="false"></div></div></td></tr>')
-                                    domConstruct.place(row, dojo.query(".atiAttributes")[0])                                    
-                                  }
+                          relatedTable.on("load",lang.hitch(this,function(loadedLayer){
+                            relatedTable = loadedLayer.layer
+                            if (Object.keys(relatedRecords).length == 0){
+                                array.forEach(relatedTable.fields,lang.hitch(this,function(field){
+                                  array.forEach(this.getThisLayerInfo(this.config.editor,layerInfo.id).fieldInfos, lang.hitch(this,function(_field){
+                                    if (_field.fieldName.substring(3) == field.name && _field.isEditable && _field.label == field.alias && field.name != relatedTable.relationships[0].keyField && field.name != layerInfo.layerObject.objectIdField){
+                                      if (field.domain){
+                                        var row = domConstruct.toDom('<tr class="relatedItems"><td class="atiLabel">' + field.alias + '</td><td><input id="select_' + field.name + '"></input></td></tr>')
+                                        domConstruct.place(row, dojo.query(".atiAttributes")[0])   
+                                        if (dijit.registry.byId("select_" + field.name)){
+                                          dijit.registry.byId("select_" + field.name).destroy()
+                                        }
+                                        for (var i = 0; i < field.domain.codedValues.length; i++){
+                                          field.domain.codedValues[i].label = field.domain.codedValues[i].name
+                                          field.domain.codedValues[i].value = field.domain.codedValues[i].code
+                                        }
+                                        var comboBox = new Select({
+                                          id: "select_" + field.name,
+                                          name: field.alias,
+                                          value: "0",
+                                          options: field.domain.codedValues
+                                        }, "select_" + field.name)
+                                        comboBox.startup();
+                                        comboBox.on("change",function(){
+                                          relatedChange(this.get("value"),graphicAttributes[relationship.keyField],field.name,relatedTable.relationships[0].keyField,"","",true)
+                                          setTimeout(function(){_viewerMap.setExtent(_viewerMap.extent)},500)
+                                        })
+                                      }else{
+                                        var row = domConstruct.toDom('<tr class="relatedItems"><td class="atiLabel">' + field.alias + '</td><td width="100%"><div class="dijit dijitReset dijitInline dijitLeft atiField dijitTextBox" role="presentation"><div class="dijitReset dijitInputField dijitInputContainer"><input class="dijitReset dijitInputInner" data-dojo-attach-point="textbox,focusNode" autocomplete="off" type="text"' + " onblur='relatedChange(event," + '"' + graphicAttributes[relationship.keyField] + '"' + ',"' + field.name + '","' + relatedTable.relationships[0].keyField + '","","",true)' + "'" + ' tabindex="0" value="" aria-disabled="false"></div></div></td></tr>')  
+                                        domConstruct.place(row, dojo.query(".atiAttributes")[0])      
+                                      }                              
+                                      //domConstruct.place(this.editor.attributeInspector._createDomainField(field).domNode, dojo.query(".atiAttributes")[0])
+                                    }
+                                  }))
                                 }))
-                              }))
-                          }else{
-                            for (var field in relatedRecords[graphicAttributes[evt.graphic._layer.objectIdField]].features[0].attributes){
-                              var layerConfig = this.getThisLayerInfo(this.config.editor,layerInfo.id);
-                              array.forEach(layerConfig.fieldInfos, lang.hitch(this,function(_field){
-                                if (_field.fieldName.substring(3) == field && _field.isEditable && field != relatedTable.relationships[0].keyField && field != layerInfo.layerObject.objectIdField){
-                                  var displayValue = ""
-                                  if (relatedRecords[graphicAttributes[evt.graphic._layer.objectIdField]].features[0].attributes[field]){
-                                    displayValue = relatedRecords[graphicAttributes[evt.graphic._layer.objectIdField]].features[0].attributes[field]
-                                  }
-                                  var row = domConstruct.toDom('<tr class="relatedItems"><td class="atiLabel">' + field + '</td><td width="100%"><div class="dijit dijitReset dijitInline dijitLeft atiField dijitTextBox" role="presentation"><div class="dijitReset dijitInputField dijitInputContainer"><input class="dijitReset dijitInputInner" data-dojo-attach-point="textbox,focusNode" autocomplete="off" type="text"' + " onblur='relatedChange(event," + '"' + graphicAttributes[relationship.keyField] + '"' + ',"' + field + '","' + relatedTable.relationships[0].keyField + '", ' + relatedRecords[graphicAttributes[evt.graphic._layer.objectIdField]].features[0].attributes[relatedRecords[graphicAttributes[evt.graphic._layer.objectIdField]].features[0]._layer.objectIdField] + ',"' + relatedRecords[graphicAttributes[evt.graphic._layer.objectIdField]].features[0]._layer.objectIdField + '",false)' + "'" + ' tabindex="0" value="' + displayValue + '" aria-disabled="false"></div></div></td></tr>')
-                                  domConstruct.place(row, dojo.query(".atiAttributes")[0])
-                                }
-                              }))
+                            }else{
+                              for (var field in relatedRecords[graphicAttributes[evt.graphic._layer.objectIdField]].features[0].attributes){
+                                array.forEach(this.getThisLayerInfo(this.config.editor,layerInfo.id).fieldInfos, lang.hitch(this,function(_field){
+                                  array.forEach(relatedTable.fields,lang.hitch(this,function(afield){
+                                    if (_field.fieldName.substring(3) == field && field == afield.name && _field.isEditable && field != relatedTable.relationships[0].keyField && field != layerInfo.layerObject.objectIdField){
+                                      var displayValue = ""
+                                      if (relatedRecords[graphicAttributes[evt.graphic._layer.objectIdField]].features[0].attributes[field]){
+                                        displayValue = relatedRecords[graphicAttributes[evt.graphic._layer.objectIdField]].features[0].attributes[field]
+                                      }
+                                      if (afield.domain){
+                                        var row = domConstruct.toDom('<tr class="relatedItems"><td class="atiLabel">' + afield.alias + '</td><td><input id="select_' + afield.name + '"></input></td></tr>')
+                                        domConstruct.place(row, dojo.query(".atiAttributes")[0])   
+                                        if (dijit.registry.byId("select_" + afield.name)){
+                                          dijit.registry.byId("select_" + afield.name).destroy()
+                                        }
+                                        for (var i = 0; i < afield.domain.codedValues.length; i++){
+                                          afield.domain.codedValues[i].label = afield.domain.codedValues[i].name
+                                          afield.domain.codedValues[i].value = afield.domain.codedValues[i].code
+                                        }
+                                        var comboBox = new Select({
+                                          id: "select_" + afield.name,
+                                          name: afield.alias,
+                                          value: displayValue,
+                                          options: afield.domain.codedValues
+                                        }, "select_" + afield.name)
+                                        comboBox.startup();
+                                        comboBox.on("change",function(){
+                                          relatedChange(this.get("value"),graphicAttributes[relationship.keyField],afield.name,relatedTable.relationships[0].keyField,relatedRecords[graphicAttributes[evt.graphic._layer.objectIdField]].features[0].attributes[relatedRecords[graphicAttributes[evt.graphic._layer.objectIdField]].features[0]._layer.objectIdField],relatedRecords[graphicAttributes[evt.graphic._layer.objectIdField]].features[0]._layer.objectIdField,false)
+                                          setTimeout(function(){_viewerMap.setExtent(_viewerMap.extent)},500)
+                                        })
+                                      }else{
+                                        var row = domConstruct.toDom('<tr class="relatedItems"><td class="atiLabel">' + afield.alias + '</td><td width="100%"><div class="dijit dijitReset dijitInline dijitLeft atiField dijitTextBox" role="presentation"><div class="dijitReset dijitInputField dijitInputContainer"><input class="dijitReset dijitInputInner" data-dojo-attach-point="textbox,focusNode" autocomplete="off" type="text"' + " onblur='relatedChange(event," + '"' + graphicAttributes[relationship.keyField] + '"' + ',"' + afield + '","' + relatedTable.relationships[0].keyField + '", ' + relatedRecords[graphicAttributes[evt.graphic._layer.objectIdField]].features[0].attributes[relatedRecords[graphicAttributes[evt.graphic._layer.objectIdField]].features[0]._layer.objectIdField] + ',"' + relatedRecords[graphicAttributes[evt.graphic._layer.objectIdField]].features[0]._layer.objectIdField + '",false)' + "'" + ' tabindex="0" value="' + displayValue + '" aria-disabled="false"></div></div></td></tr>')
+                                        domConstruct.place(row, dojo.query(".atiAttributes")[0])
+                                      }
+                                      //domConstruct.place(this.editor.attributeInspector._createDomainField(afield).domNode, dojo.query(".atiAttributes")[0])
+                                    }
+                                  }))
+                                }))
+                              }
                             }
-                          }
+                          }))
                         }))
                       }))
                     }))
@@ -426,6 +492,9 @@ define([
           settings: this._getSettingsParam()
         };
         this._worksBeforeCreate(params.settings);
+        //var it = lang.clone(params.settings.layerInfos[0].featureLayer.infoTemplate);
+        //params.settings.layerInfos[0].featureLayer = new esri.layers.FeatureLayer(params.settings.layerInfos[0].featureLayer.url.replace("FeatureServer","MapServer"),{})
+        //params.settings.layerInfos[0].featureLayer.setInfoTemplate(it);
         this.editor = new Editor(params, html.create("div", {}, this.domNode));
         this.editor.startup();
         this._worksAfterCreate();
