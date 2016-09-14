@@ -40,7 +40,7 @@ define([
   function(declare, lang, array, html, domConstruct, esriBundle, domAttr, on, FeatureLayer, _WidgetsInTemplateMixin,
     BaseWidget, MapManager, Query, QueryTask, LayerInfos, Editor, RelationshipQuery, Popup, TemplatePicker, Button, Memory, Select, editUtils) {
     return declare([BaseWidget, _WidgetsInTemplateMixin], {
-      name: 'Edit',
+      name: 'EditRelated',
       baseClass: 'jimu-widget-edit',
       editor: null,
       _defaultStartStr: "",

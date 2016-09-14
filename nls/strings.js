@@ -1,6 +1,6 @@
 define({
   root: ({
-    _widgetLabel: "Edit",
+    _widgetLabel: "EditRelated",
     title: "Select a template to create features",
     pressStr: "Press ",
     ctrlStr: " CTRL ",
